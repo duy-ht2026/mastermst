@@ -1,503 +1,321 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Upload, Download, FileCheck, Database, RefreshCw, AlertCircle, ChevronRight, ExternalLink
-} from 'lucide-react';
-
-/**
- * PROJECT: Checker [ERP Customer]
- * VERSION: 2.1.0
- * UPDATES: 
- * - Bold text for specific columns: CUST_CODE, BIZ_TYPE, CUST_GROUP, TAX_CODE, TAX_NAME
- * - DATE logic: Clear if not a valid date, not an error.
- */
-
-const SUPABASE_URL = "https://etdnpahmxdeurxlcuwcu.supabase.co";
-const SUPABASE_KEY = "sb_publishable_vVs25rvLSgZXVkxw9WeT5w_xtaagYYG";
-
-const COLUMN_NAMES = [
-  "DATE", "CUST_CODE", "CUST_NAME", "CUST_NAME_FULL", "CUST_ADDRESS", 
-  "PHUONG_XA_NEW", "PHUONG_XA_OLD", "CUST_PHONE", "CHANNEL", "BIZ_TYPE", 
-  "CUST_GROUP", "SALEMAN", "TAX_CODE", "TAX_BUYER", "TAX_NAME", 
-  "TAX_ADDRESS", "EMAIL", "PAYM_TERM", "COMMENT", "BIZ_CODE", "CUST_GRPCODE",
-  "CODE_PHUONG", "CODE_CITY", "CODE_REGION"
-];
-
-const EXPORT_TEMPLATE_HEADERS = [
-  "CUST_CODE", "CUST_NAME", "CUST_NAME_FULL", "TAX_NAME", "FIX_Loaikh", 
-  "CUST_GRPCODE", "TAX_CODE", "FIX_Currency", "CHANNEL", "SALEMAN", 
-  "FIX_BGcha", "BIZ_CODE", "CUST_ADDRESS", "PAYM_TERM", "PAYM_METHOD", 
-  "TAX_ADDRESS", "FIX_Country", "CODE_CITY", "CODE_PHUONG", "CODE_REGION", 
-  "TAX_BUYER", "CUST_PHONE", "FIX_ext", "FIX_fax", "FIX_Mobile", 
-  "EMAIL", "FIX_Web", "Fix_Cmt", "FIX_A", "FIX_B", "FIX_CN"
-];
-
-const Checker10 = () => {
-  const [data, setData] = useState([]);
-  const [validChannels, setValidChannels] = useState([]);
-  const [custGroups, setCustGroups] = useState([]);
-  const [bizModels, setBizModels] = useState([]); 
-  const [addressPreviewCount, setAddressPreviewCount] = useState(0); 
-  const [fileName, setFileName] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [dbStatus, setDbStatus] = useState('connecting');
-  const [supabaseClient, setSupabaseClient] = useState(null);
-
-  useEffect(() => {
-    if (!window.XLSX && !document.getElementById('xlsx-sdk')) {
-      const xScript = document.createElement('script');
-      xScript.id = 'xlsx-sdk';
-      xScript.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-      document.body.appendChild(xScript);
-    }
-
-    const initSupabase = () => {
-      if (window.supabase) {
-        const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        setSupabaseClient(client);
-      } else {
-        const sScript = document.createElement('script');
-        sScript.id = 'supabase-sdk';
-        sScript.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-        sScript.onload = () => {
-          if (window.supabase) {
-            const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            setSupabaseClient(client);
-          }
-        };
-        document.body.appendChild(sScript);
-      }
-    };
-    initSupabase();
-  }, []);
-
-  useEffect(() => {
-    if (supabaseClient) fetchMasterData();
-  }, [supabaseClient]);
-
-  const fetchMasterData = async () => {
-    if (!supabaseClient) return;
-    setDbStatus('loading');
-    try {
-      const { data: channels } = await supabaseClient.from('ConfigChannel').select('chcode');
-      const { data: models } = await supabaseClient.from('ConfigModel').select('chanel_code, mdname, mdcode');
-      const { data: groups } = await supabaseClient.from('ConfigCustGroup').select('chanel_code, group_name, group_code');
-      const { count } = await supabaseClient.from('ConfigAddress').select('*', { count: 'exact', head: true });
-      
-      setValidChannels(channels?.map(c => c.chcode?.toString().toUpperCase() || "") || []);
-      setBizModels(models || []);
-      setCustGroups(groups || []);
-      setAddressPreviewCount(count || 0);
-      setDbStatus('online');
-    } catch (err) {
-      setDbStatus('error');
-    }
-  };
-
-  const formatExcelDate = (val) => {
-    if (!val) return "";
-    // Xử lý số serial của Excel
-    if (typeof val === 'number' && val > 30000) {
-      const date = new Date((val - 25569) * 86400 * 1000);
-      if (!isNaN(date.getTime())) {
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      }
-    }
-    // Kiểm tra nếu là chuỗi định dạng ngày hợp lệ
-    if (typeof val === 'string' && val.trim() !== "") {
-        const date = new Date(val);
-        if (!isNaN(date.getTime())) {
-            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tra cứu Thông tin Doanh nghiệp - V3.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .error-row { background-color: #fee2e2 !important; }
+        .retry-success-row { background-color: #fefce8 !important; } 
+        .empty-row { background-color: #f3f4f6 !important; color: #9ca3af; }
+        .loading-spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 6px;
         }
-    }
-    // Nếu không phải ngày, trả về rỗng và không báo lỗi
-    return "";
-  };
-
-  const findAddressOnline = async (addressText) => {
-    if (!addressText || !supabaseClient) return null;
-    try {
-      const { data, error } = await supabaseClient
-        .from('ConfigAddress')
-        .select('code_phuong, code_city, code_region')
-        .ilike('address_short', addressText.trim())
-        .limit(1);
-      
-      if (error || !data || data.length === 0) return null;
-      return data[0];
-    } catch (e) {
-      return null;
-    }
-  };
-
-  const processRow = async (row, idx) => {
-    if (row.length === 0 || row.every(cell => cell === "")) return null;
-
-    const content = COLUMN_NAMES.map((_, cIdx) => {
-      const cell = row[cIdx];
-      // Xử lý riêng cho cột DATE (index 0)
-      if (cIdx === 0) return formatExcelDate(cell);
-      
-      let val = (cell === undefined || cell === null) ? "" : cell.toString().trim();
-      if (cIdx === 1 && (val === "" || val.toUpperCase() === "NEW")) return "NEW";
-      return val;
-    });
-
-    const validateErrors = new Set();
-    const databaseErrors = new Set();
-    const mappedIndices = new Set();
-
-    const CUST_CODE = content[1]?.toString().toUpperCase();
-    const PHUONG_XA_INPUT = content[5]?.toString().trim();
-    const CHANNEL = content[8]?.toString().toUpperCase(); 
-    const BIZ_TYPE = content[9]?.toString().toUpperCase();
-    const GROUP_NAME_INPUT = content[10]?.toString().toUpperCase();
-
-    if (!CHANNEL || CHANNEL === "") {
-      validateErrors.add(8);
-    } else if (!validChannels.includes(CHANNEL)) {
-      databaseErrors.add(8);
-    }
-
-    if (CHANNEL && BIZ_TYPE) {
-      const foundModel = bizModels.find(m => 
-        m.chanel_code?.toString().toUpperCase() === CHANNEL && 
-        m.mdname?.toString().toUpperCase() === BIZ_TYPE
-      );
-      if (foundModel) {
-        content[19] = foundModel.mdcode; 
-        mappedIndices.add(19);
-      } else {
-        databaseErrors.add(9);
-        databaseErrors.add(19); 
-        content[19] = "ERR_BIZ";
-      }
-    } else if (!BIZ_TYPE) validateErrors.add(9);
-
-    if (CHANNEL && GROUP_NAME_INPUT) {
-      const foundGroup = custGroups.find(g => 
-        g.chanel_code?.toString().toUpperCase() === CHANNEL && 
-        g.group_name?.toString().toUpperCase() === GROUP_NAME_INPUT
-      );
-      if (foundGroup) {
-        content[20] = foundGroup.group_code;
-        mappedIndices.add(20);
-      } else {
-        databaseErrors.add(10);
-        databaseErrors.add(20);
-        content[20] = "ERR_GRP";
-      }
-    } else if (!GROUP_NAME_INPUT) validateErrors.add(10);
-
-    if (PHUONG_XA_INPUT) {
-      const foundAddr = await findAddressOnline(PHUONG_XA_INPUT);
-      if (foundAddr) {
-        content[21] = foundAddr.code_phuong;
-        content[22] = foundAddr.code_city;
-        content[23] = foundAddr.code_region;
-        mappedIndices.add(21);
-        mappedIndices.add(22);
-        mappedIndices.add(23);
-      } else {
-        databaseErrors.add(5);
-        content[21] = "ERR_ADDR";
-        content[22] = "ERR_ADDR";
-        content[23] = "ERR_ADDR";
-      }
-    } else {
-      validateErrors.add(5);
-    }
-
-    const isNewCustomer = CUST_CODE === "NEW";
-    if (isNewCustomer) {
-      const requiredForNew = [2, 3, 4, 5, 6, 8, 9, 10, 14, 15];
-      requiredForNew.forEach(idx => {
-        if (!content[idx] || content[idx].toString().trim() === "") {
-          validateErrors.add(idx);
-        }
-      });
-    }
-
-    return { 
-      content, 
-      rowNumber: idx + 4, 
-      isError: validateErrors.size > 0 || databaseErrors.size > 0, 
-      isNewCustomer, 
-      validateErrors: Array.from(validateErrors), 
-      databaseErrors: Array.from(databaseErrors), 
-      mappedIndices: Array.from(mappedIndices) 
-    };
-  };
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file || !window.XLSX) return;
-    setFileName(file.name);
-    setIsProcessing(true);
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target.result;
-        const wb = window.XLSX.read(bstr, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rawJson = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-        
-        if (rawJson.length >= 3) {
-          const rowsToProcess = rawJson.slice(3);
-          const results = await Promise.all(
-            rowsToProcess.map((row, idx) => processRow(row, idx))
-          );
-          setData(results.filter(item => item !== null));
-        }
-      } catch (err) { 
-        console.error("Lỗi xử lý file:", err); 
-      } finally { 
-        setIsProcessing(false); 
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  const exportFile = () => {
-    if (data.length === 0 || !window.XLSX) return;
-
-    const exportRows = data.map(item => {
-      const raw = item.content;
-      return EXPORT_TEMPLATE_HEADERS.map(header => {
-        switch (header) {
-          case "CUST_CODE": return raw[1];
-          case "CUST_NAME": return raw[2];
-          case "CUST_NAME_FULL": return raw[3];
-          case "TAX_NAME": return raw[14];
-          case "FIX_Loaikh": return "1";
-          case "CUST_GRPCODE": return raw[20];
-          case "TAX_CODE": return raw[12];
-          case "FIX_Currency": return "VND";
-          case "CHANNEL": return raw[8];
-          case "SALEMAN": return raw[11];
-          case "FIX_BGcha": return "";
-          case "BIZ_CODE": return raw[19];
-          case "CUST_ADDRESS": return raw[4];
-          case "PAYM_TERM": return "COD";
-          case "PAYM_METHOD": return "TM/CK";
-          case "TAX_ADDRESS": return raw[15];
-          case "FIX_Country": return "VN";
-          case "CODE_CITY": return raw[22];
-          case "CODE_PHUONG": return raw[21];
-          case "CODE_REGION": return raw[23];
-          case "TAX_BUYER": return raw[13];
-          case "CUST_PHONE": return raw[7];
-          case "EMAIL": return raw[16];
-          case "FIX_A": return "FALSE";
-          case "FIX_B": return "0";
-          case "FIX_CN": return "C";
-          default: 
-            if (header.startsWith("FIX_") || header.startsWith("Fix_")) return ""; 
-            return "";
-        }
-      });
-    });
-
-    const finalAOA = [
-      ["Dữ liệu này được export từ Web-App"],
-      EXPORT_TEMPLATE_HEADERS,
-      ...exportRows
-    ];
-
-    const ws = window.XLSX.utils.aoa_to_sheet(finalAOA);
-    const wscols = EXPORT_TEMPLATE_HEADERS.map(h => ({ wch: h.length + 10 }));
-    ws['!cols'] = wscols;
-
-    const wb = window.XLSX.utils.book_new();
-    window.XLSX.utils.book_append_sheet(wb, ws, "DMS_Customer_Template");
-    window.XLSX.writeFile(wb, `erpCustomerExpWeb_${new Date().getTime()}.xlsx`);
-  };
-
-  return (
-    <div className="flex flex-col h-screen bg-[#f8fafc] font-sans overflow-hidden text-slate-800">
-      <header className="h-11 bg-[#057a10] text-white px-4 flex items-center justify-between shrink-0 shadow-md z-50">
-        <div className="flex items-center gap-2.5">
-          <div className="bg-white/20 p-1 rounded-md">
-            <FileCheck size={18} className="text-white" />
-          </div>
-          <h1 className="text-[12px] font-black uppercase tracking-tight">Checker [ERP Customer]</h1>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-black/10 border border-white/10">
-            <div className={`w-1.5 h-1.5 rounded-full ${dbStatus === 'online' ? 'bg-emerald-400' : 'bg-red-500'}`}></div>
-            <span className="text-[9px] font-bold uppercase">{dbStatus === 'online' ? 'Database Active' : 'Connecting...'}</span>
-            <button onClick={fetchMasterData} className="hover:rotate-180 transition-transform ml-0.5 opacity-70 hover:opacity-100">
-              <RefreshCw size={10}/>
-            </button>
-          </div>
-
-          <input type="file" id="xlUp" className="hidden" onChange={handleFileUpload} accept=".xlsx, .xls" />
-          <label htmlFor="xlUp" className={`cursor-pointer px-4 py-1.5 bg-white/10 hover:bg-white/20 rounded text-[9px] font-black uppercase border border-white/20 transition-all ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
-            {isProcessing ? 'Đang Xử Lý...' : 'Nạp Excel'}
-          </label>
-          
-          <div className="flex items-center gap-2.5">
-            <button 
-              onClick={exportFile} 
-              disabled={data.length === 0 || isProcessing} 
-              className="px-4 py-1.5 bg-white text-[#057a10] rounded text-[9px] font-black uppercase shadow-sm disabled:opacity-30 active:scale-95 transition-all"
-            >
-              Xuất File
-            </button>
-            <div className="w-[1px] h-4 bg-white/20 mx-1"></div>
-            <a 
-              href="/checkmst" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-white hover:text-emerald-100 transition-colors"
-              title="Kiểm tra mã số thuế"
-            >
-              <ExternalLink size={14} />
-              <span className="text-[9px] font-bold underline underline-offset-4 decoration-white/40 uppercase">Kiểm MST</span>
-            </a>
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 overflow-hidden p-2">
-        {data.length > 0 ? (
-          <div className="bg-white rounded-lg border border-slate-300 shadow-sm h-full flex flex-col overflow-hidden">
-            <div className="px-3 py-2 bg-slate-50 border-b border-slate-300 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-4">
-                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-700 uppercase">
-                   <ChevronRight size={14} className="text-[#057a10]"/> {fileName}
-                 </div>
-                 <div className="flex items-center gap-4 border-l border-slate-300 pl-4">
-                    <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-500 uppercase">
-                        <div className="w-2 h-2 bg-red-600 rounded-sm"></div> Thiếu Thông Tin
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-500 uppercase">
-                        <div className="w-2 h-2 bg-amber-500 rounded-sm"></div> Sai Danh Mục
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-500 uppercase">
-                        <span className="text-red-600 font-black">NEW</span> = Khách Mới
-                    </div>
-                 </div>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                 <span className="text-[9px] font-bold text-slate-400 uppercase">Hàng: {data.length}</span>
-                 <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${data.filter(d => d.isError).length > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                   {data.filter(d => d.isError).length} Lỗi
-                 </span>
-              </div>
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        table { font-size: 0.825rem; }
+        th { white-space: nowrap; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; }
+    </style>
+</head>
+<body class="p-2 md:p-4">
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-4 flex items-center justify-between flex-wrap gap-2">
+            <div>
+                <h1 class="text-xl font-bold text-gray-800">Tra cứu Mã số Thuế (V3- Excel)</h1>
+                <p class="text-gray-500 text-sm">Dữ liệu từ Dòng 4 | MST ở Cột M | Cột C (CustCode) là điều kiện | Max 200 dòng</p>
             </div>
-
-            <div className="flex-1 overflow-auto relative">
-              {isProcessing && (
-                <div className="absolute inset-0 bg-white/60 z-50 flex items-center justify-center backdrop-blur-[1px]">
-                    <div className="flex flex-col items-center gap-2">
-                        <RefreshCw className="animate-spin text-[#057a10]" size={24} />
-                        <span className="text-[9px] font-black uppercase tracking-widest text-[#057a10]">Đang đối soát địa chỉ Database...</span>
-                    </div>
-                </div>
-              )}
-              <table className="w-full border-separate border-spacing-0 text-[11px] min-w-max">
-                <thead>
-                  <tr className="bg-slate-800 text-slate-300 sticky top-0 z-40">
-                    <th className="w-10 px-1 py-1.5 text-center border-b border-r border-slate-600 font-bold uppercase bg-slate-900 sticky left-0 z-50">#</th>
-                    {COLUMN_NAMES.map((h, i) => (
-                      <th 
-                        key={i} 
-                        style={{ width: i === 4 ? '280px' : 'auto', maxWidth: i === 4 ? '280px' : '250px' }}
-                        className={`px-2 py-1.5 text-left border-b border-r border-slate-600 font-bold uppercase whitespace-nowrap
-                          ${[5, 8, 9, 10].includes(i) ? 'bg-slate-700 text-emerald-300' : ''}
-                          ${i >= 19 ? 'bg-indigo-950 text-indigo-200' : ''}
-                        `}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-300">
-                  {data.map((row, idx) => (
-                    <tr key={idx} className={`${row.isError ? 'bg-red-50/50' : (idx % 2 === 0 ? 'bg-blue-50' : 'bg-white')} hover:bg-amber-50 transition-colors h-[28px]`}>
-                      <td className={`px-1 py-1 text-center font-bold border-r border-slate-300 sticky left-0 z-20 ${row.isError ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-white'}`}>
-                        {row.rowNumber}
-                      </td>
-                      {row.content.map((cell, cIdx) => {
-                        const isValErr = row.validateErrors.includes(cIdx);
-                        const isDbErr = row.databaseErrors.includes(cIdx);
-                        const isMap = row.mappedIndices.includes(cIdx);
-                        const isAddress = cIdx === 4;
-                        const isErrAddr = cell === "ERR_ADDR";
-                        
-                        // Các cột cần bôi đậm: CUST_CODE(1), BIZ_TYPE(9), CUST_GROUP(10), TAX_CODE(12), TAX_NAME(14)
-                        const isTargetBold = [1, 9, 10, 12, 14].includes(cIdx);
-
-                        let tdClass = `px-2 py-1 border-r border-slate-300 align-middle`;
-                        let style = isAddress ? { width: '280px', minWidth: '280px', maxWidth: '280px' } : { maxWidth: '250px' };
-                        
-                        if (isAddress) tdClass += " whitespace-normal leading-tight break-words";
-                        else tdClass += " whitespace-nowrap overflow-hidden text-ellipsis";
-
-                        if (isValErr) {
-                          tdClass += " bg-red-600 text-white font-bold";
-                        } else if (isDbErr) {
-                          tdClass += " bg-amber-500 text-white font-bold";
-                        } else if (isMap) {
-                          tdClass += " bg-indigo-50 text-indigo-900 font-bold border-l border-indigo-300";
-                        }
-
-                        return (
-                          <td key={cIdx} className={tdClass} style={style} title={cell}>
-                            <span className={`
-                              ${isTargetBold ? "font-bold" : ""}
-                              ${cIdx === 1 && cell === "NEW" ? "text-red-500" : ""}
-                              ${isErrAddr ? "text-amber-600 font-bold" : ""}
-                            `}>
-                              {isValErr ? (cell || "TRỐNG") : isDbErr ? (cell || "KO_KHỚP") : cell}
-                            </span>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center bg-white rounded-xl border-2 border-dashed border-slate-300 shadow-sm">
-            <div className="p-8 bg-emerald-50 rounded-full mb-5 border border-emerald-100 shadow-inner">
-                <Database size={56} className="text-[#057a10] opacity-80" />
-            </div>
-            <h2 className="text-xl font-black uppercase text-slate-300 tracking-[0.2em] mb-4">Database Checker</h2>
-            <div className="flex gap-3">
-                <div className="px-5 py-2 bg-slate-50 rounded-xl border border-slate-200 flex flex-col items-center min-w-[100px]">
-                    <span className="text-[8px] font-bold text-slate-400 uppercase">Channel Master</span>
-                    <span className="text-base font-black text-slate-600">{validChannels.length}</span>
-                </div>
-                <div className="px-5 py-2 bg-slate-50 rounded-xl border border-slate-200 flex flex-col items-center min-w-[100px]">
-                    <span className="text-[8px] font-bold text-slate-400 uppercase">Address Records</span>
-                    <span className="text-base font-black text-slate-600">{addressPreviewCount.toLocaleString()}</span>
-                </div>
-                <div className="px-5 py-2 bg-slate-50 rounded-xl border border-slate-200 flex flex-col items-center min-w-[100px]">
-                    <span className="text-[8px] font-bold text-slate-400 uppercase">Database Mode</span>
-                    <span className="text-base font-black text-[#057a10]">CONNECTED</span>
+            <div class="flex gap-2">
+                <div class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100 shadow-sm">
+                    Cột M (MST) - Phát hiện CCCD (12 số)
                 </div>
             </div>
-          </div>
-        )}
-      </main>
+        </header>
 
-      <footer className="h-6 bg-white border-t border-slate-300 px-4 flex items-center justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider shrink-0">
-        <div>
-          <span>© {new Date().getFullYear()} [IT-Master HTCorp] - ERP Customer Validation Tool</span>
+        <div class="bg-white rounded-lg shadow-sm p-4 mb-4 border border-gray-200">
+            <div class="flex border-b border-gray-100 mb-4">
+                <button onclick="switchTab('manual')" id="tabManual" class="px-6 py-2 text-sm font-semibold transition tab-active">Thủ công</button>
+                <button onclick="switchTab('excel')" id="tabExcel" class="px-6 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition">📊 Excel (Cột M)</button>
+            </div>
+
+            <div id="manualArea">
+                <textarea id="mstInput" rows="3" class="w-full p-3 border border-gray-200 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Dán danh sách MST..."></textarea>
+            </div>
+
+            <div id="excelArea" class="hidden">
+                <div class="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:border-blue-400 transition cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                    <input type="file" id="fileInput" class="hidden" accept=".xlsx, .xls, .csv" onchange="handleFileSelect(event)">
+                    <p class="text-sm font-medium text-gray-700" id="fileNameDisplay">Kéo thả hoặc chọn file Excel</p>
+                    <p class="text-xs text-gray-400 mt-1 italic">Hệ thống sẽ dừng ngay khi gặp Cột C trống (Mã khách hàng).</p>
+                </div>
+            </div>
+            
+            <div class="mt-4 flex flex-wrap gap-2 items-center justify-between">
+                <div class="flex gap-2">
+                    <button onclick="startLookup()" id="btnSearch" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-6 rounded transition flex items-center shadow-sm">
+                        <span id="btnText">Bắt đầu tra cứu</span>
+                    </button>
+                    <button onclick="exportToExcel()" id="btnExport" disabled class="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 text-white text-sm font-medium py-2 px-6 rounded transition shadow-sm">Xuất Excel</button>
+                </div>
+                
+                <div id="progressInfo" class="hidden text-xs font-medium text-blue-600 flex items-center">
+                    <div class="loading-spinner"></div> 
+                    <span>Tiến độ: <span id="currentCount">0</span>/<span id="totalCount">0</span></span>
+                    <span id="retryStatus" class="ml-2 text-orange-500 font-bold uppercase animate-pulse"></span>
+                </div>
+            </div>
         </div>
-        <div className="flex items-center gap-2">
-            <div className={`w-1.5 h-1.5 rounded-full ${dbStatus === 'online' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-            <span>{dbStatus === 'online' ? 'Database Synchronized' : 'Database Offline'}</span>
+
+        <div class="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
+            <div class="overflow-x-auto">
+                <table id="taxTable" class="w-full text-left border-separate border-spacing-0">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="p-3 text-xs font-bold text-gray-600 border-b border-gray-200 w-16">Dòng EX</th>
+                            <th class="p-3 text-xs font-bold text-gray-600 border-b border-gray-200">Mã Số Thuế</th>
+                            <th class="p-3 text-xs font-bold text-gray-600 border-b border-gray-200">Loại MST</th>
+                            <th class="p-3 text-xs font-bold text-gray-600 border-b border-gray-200">Tên doanh nghiệp / Cá nhân</th>
+                            <th class="p-3 text-xs font-bold text-gray-600 border-b border-gray-200">Địa chỉ</th>
+                            <th class="p-3 text-xs font-bold text-gray-600 border-b border-gray-200">Trạng thái</th>
+                            <th class="p-3 text-xs font-bold text-gray-600 border-b border-gray-200 text-center">Nguồn</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultBody" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+            <div id="emptyState" class="p-12 text-center text-gray-400 text-sm italic bg-gray-50/50">Chưa tải dữ liệu.</div>
         </div>
-      </footer>
     </div>
-  );
-};
 
-const App = () => <Checker10 />;
-export default App;
+    <script>
+        let searchResults = [];
+        let excelData = [];
+        let activeTab = 'manual';
+        const MAX_ROWS = 200; 
+        const delay = (ms) => new Promise(res => setTimeout(res, ms));
+
+        function switchTab(tab) {
+            activeTab = tab;
+            document.getElementById('manualArea').classList.toggle('hidden', tab !== 'manual');
+            document.getElementById('excelArea').classList.toggle('hidden', tab !== 'excel');
+            document.getElementById('tabManual').classList.toggle('tab-active', tab === 'manual');
+            document.getElementById('tabExcel').classList.toggle('tab-active', tab === 'excel');
+        }
+
+        function cleanTaxCode(val) {
+            if (val === null || val === undefined) return "";
+            let str = String(val).trim();
+            if (str.startsWith("'")) str = str.substring(1); 
+            return str;
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }); 
+                
+                excelData = [];
+                for (let i = 3; i < json.length; i++) {
+                    const row = json[i];
+                    const custCode = row[2]; 
+
+                    if (custCode === undefined || custCode === null || String(custCode).trim() === "") {
+                        break;
+                    }
+
+                    if (excelData.length >= MAX_ROWS) break;
+
+                    excelData.push({
+                        mst: cleanTaxCode(row[12]), 
+                        originalRow: i + 1
+                    });
+                }
+                
+                document.getElementById('fileNameDisplay').innerHTML = `File: <b>${file.name}</b><br><span class="text-blue-600 font-bold">Phát hiện ${excelData.length} dòng.</span>`;
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function fetchWithRetry(originalMst) {
+            const queryMst = String(originalMst).trim();
+            if (!queryMst || queryMst === "") return { success: 'empty', queryMst: "" };
+
+            const isCCCD = /^\d{12}$/.test(queryMst.replace(/-/g, ''));
+            if (queryMst.replace(/-/g, '').length < 8) {
+                return { success: false, queryMst, isCCCD, error: 'Dữ liệu quá ngắn', canRetry: false };
+            }
+
+            // API 1: VietQR
+            try {
+                const response = await fetch(`https://api.vietqr.io/v2/business/${queryMst}`);
+                if (response.ok) {
+                    const res = await response.json();
+                    if (res.code === '00' && res.data && res.data.name) {
+                        return { success: true, source: 'VietQR', queryMst, isCCCD, data: res.data };
+                    }
+                }
+            } catch (err) {}
+
+            // API 2: XInvoice
+            try {
+                const targetUrl = `https://api.xinvoice.vn/gdt-api/tax-payer/${queryMst}`;
+                const response = await fetch(targetUrl);
+                const json = await response.json();
+                if (json && json.taxID) {
+                    return { success: true, source: 'XInvoice', queryMst, isCCCD, data: { name: json.name, address: json.address, status: json.status || 'Hoạt động' } };
+                }
+            } catch (e) {}
+
+            // API 3: Escodata (Dự phòng)
+            try {
+                const targetUrl = `https://escodata.net/api-mst/${queryMst}.htm`;
+                const response = await fetch(targetUrl);
+                const json = await response.json();
+                if (json && json.error === 0 && json.data) {
+                    return { success: true, source: 'Esco', queryMst, isCCCD, data: { name: json.data.ten, address: json.data.dc, status: 'Hoạt động' } };
+                }
+            } catch (e) {}
+
+            return { success: false, queryMst, isCCCD, error: 'Không tìm thấy thông tin', canRetry: true };
+        }
+
+        function renderRow(itemResult) {
+            const tbody = document.getElementById('resultBody');
+            const tr = document.createElement('tr');
+            tr.setAttribute('data-row-id', itemResult.excelIndex);
+            tr.className = 'hover:bg-gray-50 border-b border-gray-100 transition-colors';
+
+            const typeLabel = itemResult.isCCCD ? '<span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-bold uppercase">CCCD</span>' : '';
+
+            if (itemResult.success === 'empty') {
+                tr.className += ' empty-row';
+                tr.innerHTML = `<td class="p-3 text-gray-400">${itemResult.excelIndex}</td><td class="p-3 italic text-gray-400" colspan="6">(MST Trống)</td>`;
+            } else if (!itemResult.success) {
+                tr.className += ' error-row text-red-600';
+                tr.innerHTML = `
+                    <td class="p-3">${itemResult.excelIndex}</td>
+                    <td class="p-3 font-mono font-bold">${itemResult.queryMst}</td>
+                    <td class="p-3">${typeLabel}</td>
+                    <td colspan="3" class="p-3 italic text-[11px]">${itemResult.error}</td>
+                    <td class="p-3 text-center text-gray-300">-</td>`;
+            } else {
+                if (itemResult.isRetry) tr.className += ' retry-success-row';
+                tr.innerHTML = `
+                    <td class="p-3 text-gray-400">${itemResult.excelIndex}</td>
+                    <td class="p-3 font-mono font-bold text-blue-700">${itemResult.queryMst}</td>
+                    <td class="p-3">${typeLabel}</td>
+                    <td class="p-3 font-medium text-gray-900 leading-tight">${itemResult.data.name}</td>
+                    <td class="p-3 text-gray-500 text-[12px] leading-relaxed max-w-xs">${itemResult.data.address}</td>
+                    <td class="p-3"><span class="px-2 py-0.5 bg-green-100 text-green-800 rounded text-[10px] font-bold uppercase">${itemResult.data.status || 'Hoạt động'}</span></td>
+                    <td class="p-3 text-center"><span class="text-[10px] px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded text-blue-600 font-semibold">${itemResult.source}</span></td>`;
+            }
+            tbody.appendChild(tr);
+        }
+
+        async function startLookup() {
+            let listToProcess = [];
+            if (activeTab === 'manual') {
+                const input = document.getElementById('mstInput').value;
+                listToProcess = input.split(/\r?\n/).slice(0, MAX_ROWS).map((l, i) => ({ mst: cleanTaxCode(l), originalRow: i + 1 }));
+            } else {
+                listToProcess = excelData;
+            }
+
+            if (listToProcess.length === 0) return alert("Vui lòng tải file hoặc nhập dữ liệu!");
+
+            const btnSearch = document.getElementById('btnSearch');
+            const progressInfo = document.getElementById('progressInfo');
+            const retryStatus = document.getElementById('retryStatus');
+            
+            btnSearch.disabled = true;
+            progressInfo.classList.remove('hidden');
+            document.getElementById('resultBody').innerHTML = '';
+            document.getElementById('totalCount').innerText = listToProcess.length;
+            document.getElementById('emptyState').classList.add('hidden');
+            
+            searchResults = [];
+
+            for (let i = 0; i < listToProcess.length; i++) {
+                document.getElementById('currentCount').innerText = i + 1;
+                const item = listToProcess[i];
+                const res = await fetchWithRetry(item.mst);
+                res.excelIndex = item.originalRow;
+                res.isRetry = false;
+                
+                searchResults.push(res);
+                renderRow(res);
+                if (res.success !== 'empty') await delay(500); 
+            }
+
+            const failedItems = searchResults.filter(r => r.success === false && r.canRetry === true);
+            if (failedItems.length > 0) {
+                for (let i = 0; i < failedItems.length; i++) {
+                    const failed = failedItems[i];
+                    retryStatus.innerText = `[Dòng ${failed.excelIndex}]`;
+                    const res = await fetchWithRetry(failed.queryMst);
+                    if (res.success === true) {
+                        res.excelIndex = failed.excelIndex;
+                        res.isRetry = true;
+                        const idx = searchResults.findIndex(r => r.excelIndex === failed.excelIndex);
+                        searchResults[idx] = res;
+                        
+                        const rowUI = document.querySelector(`tr[data-row-id="${failed.excelIndex}"]`);
+                        if (rowUI) {
+                            rowUI.className = 'hover:bg-gray-50 border-b border-gray-100 retry-success-row';
+                            const typeLabel = res.isCCCD ? '<span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-bold uppercase">CCCD</span>' : '';
+                            rowUI.innerHTML = `
+                                <td class="p-3 text-gray-400">${res.excelIndex}</td>
+                                <td class="p-3 font-mono font-bold text-blue-700">${res.queryMst}</td>
+                                <td class="p-3">${typeLabel}</td>
+                                <td class="p-3 font-medium text-gray-900 leading-tight">${res.data.name}</td>
+                                <td class="p-3 text-gray-500 text-[12px] leading-relaxed max-w-xs">${res.data.address}</td>
+                                <td class="p-3"><span class="px-2 py-0.5 bg-green-100 text-green-800 rounded text-[10px] font-bold uppercase">Hoạt động</span></td>
+                                <td class="p-3 text-center"><span class="text-[10px] px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded text-blue-600 font-semibold">${res.source}</span></td>`;
+                        }
+                    }
+                    await delay(800);
+                }
+            }
+
+            btnSearch.disabled = false;
+            document.getElementById('btnText').innerText = 'Bắt đầu tra cứu';
+            progressInfo.classList.add('hidden');
+            retryStatus.innerText = "";
+            document.getElementById('btnExport').disabled = false;
+        }
+
+        function exportToExcel() {
+            const data = searchResults.map(r => ({
+                "Dòng Excel": r.excelIndex,
+                "MST/CCCD": r.queryMst,
+                "Loại": r.isCCCD ? "CCCD" : "",
+                "Tên doanh nghiệp / Cá nhân": r.success === true ? r.data.name : "-",
+                "Địa chỉ": r.success === true ? r.data.address : "",
+                "Nguồn": r.source || "",
+                "Kết quả": r.success === true ? "Thành công" : (r.success === 'empty' ? "Trống" : r.error)
+            }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "KetQua");
+            XLSX.writeFile(wb, `MST_V3_Result.xlsx`);
+        }
+    </script>
+</body>
+</html>
